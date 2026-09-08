@@ -1,8 +1,43 @@
 #include <SDL3/SDL.h>
-// #include <SDL3/SDL_events.h>
-// #include <SDL3/SDL_oldnames.h>
-// #include <SDL3/SDL_render.h>
+#include <SDL3/SDL_render.h>
+#include <cstdlib>
 #include <stdio.h>
+
+#define internal static
+#define local_persist static
+#define global_variable static
+
+global_variable SDL_Texture *Texture;
+global_variable void *Pixels;
+global_variable int TextureWidth;
+
+internal void
+SDLResizeTexture (SDL_Renderer *Renderer, int Width, int Height)
+{
+
+  if (Pixels)
+    {
+      free (Pixels);
+    }
+  if (Texture)
+    {
+      SDL_DestroyTexture (Texture);
+    }
+  SDL_Texture *Texture
+      = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ABGR8888,
+                           SDL_TEXTUREACCESS_STREAMING, Width, Height);
+
+  TextureWidth = Width;
+  void *Pixels = malloc (Width * Height * 4);
+}
+internal void
+SDLUpdateWindow (SDL_Window *Window, SDL_Renderer *Renderer)
+{
+  SDL_UpdateTexture (Texture, 0, Pixels, TextureWidth * 4);
+  SDL_RenderTexture (Renderer, Texture, 0, 0);
+  SDL_RenderPresent (Renderer);
+}
+// SDL_GetWindowSize (Window, &Width, &Height);
 
 bool
 HandleEvent (SDL_Event *Event)
@@ -20,6 +55,9 @@ HandleEvent (SDL_Event *Event)
       {
         printf ("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d\n", Event->window.data1,
                 Event->window.data2);
+        SDL_Window *Window = SDL_GetWindowFromID (Event->window.windowID);
+        SDL_Renderer *Renderer = SDL_GetRenderer (Window);
+        SDLResizeTexture (Renderer, Event->window.data1, Event->window.data2);
       }
       break;
     case SDL_EVENT_WINDOW_EXPOSED:
@@ -27,22 +65,23 @@ HandleEvent (SDL_Event *Event)
         printf ("Window exposed \n");
         SDL_Window *Window = SDL_GetWindowFromID (Event->window.windowID);
         SDL_Renderer *Renderer = SDL_GetRenderer (Window);
-        if (Renderer)
-          {
-            static bool IsWhite = true;
-            if (IsWhite == true)
-              {
-                SDL_SetRenderDrawColor (Renderer, 255, 255, 255, 255);
-                IsWhite = false;
-              }
-            else
-              {
-                SDL_SetRenderDrawColor (Renderer, 0, 0, 0, 255);
-                IsWhite = true;
-              }
-            SDL_RenderClear (Renderer);
-            SDL_RenderPresent (Renderer);
-          }
+        // if (Renderer)
+        //   {
+        //     static bool IsWhite = true;
+        //     if (IsWhite == true)
+        //       {
+        //         SDL_SetRenderDrawColor (Renderer, 255, 255, 255, 255);
+        //         IsWhite = false;
+        //       }
+        //     else
+        //       {
+        //         SDL_SetRenderDrawColor (Renderer, 0, 0, 0, 255);
+        //         IsWhite = true;
+        //       }
+        //     SDL_RenderClear (Renderer);
+        //     SDL_RenderPresent (Renderer);
+        //   }
+        SDLUpdateWindow (Window, Renderer);
       }
       break;
     }
@@ -61,12 +100,11 @@ main (int argc, char *argv[])
   Window
       = SDL_CreateWindow ("Handmade Penguin", 640, 480, SDL_WINDOW_RESIZABLE);
 
-  int Width, Height;
-  SDL_GetWindowSize (Window, &Width, &Height);
-
   if (Window)
     {
+      // Create a renderer for the window
       SDL_Renderer *Renderer = SDL_CreateRenderer (Window, NULL);
+
       if (Renderer)
         {
           for (;;)
@@ -79,6 +117,14 @@ main (int argc, char *argv[])
                 }
             }
         }
+      else
+        {
+          // TODO: logging
+        }
+    }
+  else
+    {
+      // TODO: logging
     }
 SDL_Quit:
   return 0;
