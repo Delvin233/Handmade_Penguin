@@ -64,3 +64,6 @@ Project Target=
 Use External Terminal=false
 Working Directory=file:///home/delvo/Documents/Handmade_Penguin/build
 isExecutable=true
+
+[Project]
+VersionControlSupport=kdevgit
