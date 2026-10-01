@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <sys/mman.h>
 
-// a workaround since MAP_ANNONYMOUS is not defined on some UNIX systems
-#ifndef MAP_ANNOYMOUS
-// #define MAP_ANONYMOUS MAP_ANON
+// a workaround since MAP_ANONYMOUS is not defined on some UNIX systems
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
 #endif
 
 #define internal static
@@ -46,9 +46,9 @@ RenderWeirdGradient (int BlueOffset, int GreenOffset)
       for (int X = 0; X < BitmapWidth; ++X)
         {
           uint8 Blue = (X + BlueOffset);
-          uint8 Green = (X + GreenOffset);
+          uint8 Green = (Y + GreenOffset);
 
-          *Pixel++ = ((Green << 8) | Blue);
+          *Pixel++ = ((0xFF << 24) | (Green << 8) | Blue << 0);
         }
       Row += Pitch;
     }
@@ -66,7 +66,7 @@ SDLResizeTexture (SDL_Renderer *Renderer, int Width, int Height)
     {
       SDL_DestroyTexture (Texture);
     }
-  Texture = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ABGR8888,
+  Texture = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ARGB8888,
                                SDL_TEXTUREACCESS_STREAMING, Width, Height);
   BitmapWidth = Width;
   BitmapHeight = Height;
@@ -83,7 +83,6 @@ SDLUpdateWindow (SDL_Window *Window, SDL_Renderer *Renderer)
   SDL_RenderTexture (Renderer, Texture, 0, 0);
   SDL_RenderPresent (Renderer);
 }
-// SDL_GetWindowSize (Window, &Width, &Height);
 
 bool
 HandleEvent (SDL_Event *Event)
@@ -110,28 +109,12 @@ HandleEvent (SDL_Event *Event)
       {
         printf ("Window focus gained \n");
       }
+      break;
     case SDL_EVENT_WINDOW_EXPOSED:
       {
         printf ("Window exposed \n");
         SDL_Window *Window = SDL_GetWindowFromID (Event->window.windowID);
         SDL_Renderer *Renderer = SDL_GetRenderer (Window);
-        // if (Renderer)
-        //   {
-        //     static bool IsWhite = true;
-        //     if (IsWhite == true)
-        //       {
-        //         SDL_SetRenderDrawColor (Renderer, 255, 255, 255, 255);
-        //         IsWhite = false;
-        //       }
-        //     else
-        //       {
-        //         SDL_SetRenderDrawColor (Renderer, 0, 0, 0, 255);
-        //         IsWhite = true;
-        //       }
-        //     SDL_RenderClear (Renderer);
-        //     SDL_RenderPresent (Renderer);
-        //   }
-        // SDLUpdateWindow (Window, Renderer);
       }
       break;
     }
