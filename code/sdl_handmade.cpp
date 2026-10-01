@@ -1,9 +1,5 @@
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_render.h>
-#include <SDL3/SDL_video.h>
-#include <cstdlib>
-#include <stdint.h>
+#include <SDL3/SDL_gamepad.h>
 #include <stdio.h>
 #include <sys/mman.h>
 
@@ -26,24 +22,35 @@ typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef uint64_t uint64;
 
-global_variable SDL_Texture *Texture;
-global_variable void *BitmapMemory;
-global_variable int BitmapWidth;
-global_variable int BitmapHeight;
-global_variable int BytesPerPixel = 4;
+// global_variable SDL_Texture *Texture;
+// global_variable void *BitmapMemory;
+// global_variable int BitmapWidth;
+// global_variable int BitmapHeight;
+// global_variable int BytesPerPixel = 4;
+
+struct sdl_offscreen_buffer
+{
+  SDL_Texture *Texture;
+  void *Memory;
+  int Width;
+  int Height;
+  int BytesPerPixel;
+};
+global_variable sdl_offscreen_buffer GlobalBackbuffer;
 
 internal void
-RenderWeirdGradient (int BlueOffset, int GreenOffset)
+RenderWeirdGradient (sdl_offscreen_buffer Buffer, int BlueOffset,
+                     int GreenOffset)
 {
-  int Width = BitmapWidth;
-  int Height = BitmapHeight;
+  int Width = Buffer.Width;
+  int Height = Buffer.Height;
 
-  int Pitch = Width * BytesPerPixel;
-  uint8 *Row = (uint8 *)BitmapMemory;
-  for (int Y = 0; Y < BitmapHeight; ++Y)
+  int Pitch = Width * Buffer.BytesPerPixel;
+  uint8 *Row = (uint8 *)Buffer.Memory;
+  for (int Y = 0; Y < Buffer.Height; ++Y)
     {
       uint32 *Pixel = (uint32 *)Row;
-      for (int X = 0; X < BitmapWidth; ++X)
+      for (int X = 0; X < Buffer.Width; ++X)
         {
           uint8 Blue = (X + BlueOffset);
           uint8 Green = (Y + GreenOffset);
@@ -55,32 +62,38 @@ RenderWeirdGradient (int BlueOffset, int GreenOffset)
 };
 
 internal void
-SDLResizeTexture (SDL_Renderer *Renderer, int Width, int Height)
+SDLResizeTexture (sdl_offscreen_buffer *Buffer, SDL_Renderer *Renderer,
+                  int Width, int Height)
 {
 
-  if (BitmapMemory)
+  if (Buffer->Memory)
     {
-      munmap (BitmapMemory, BitmapWidth * BitmapHeight * BytesPerPixel);
+      munmap (Buffer->Memory,
+              Buffer->Width * Buffer->Height * Buffer->BytesPerPixel);
     }
-  if (Texture)
+  if (Buffer->Texture)
     {
-      SDL_DestroyTexture (Texture);
+      SDL_DestroyTexture (Buffer->Texture);
     }
-  Texture = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ARGB8888,
-                               SDL_TEXTUREACCESS_STREAMING, Width, Height);
-  BitmapWidth = Width;
-  BitmapHeight = Height;
+  Buffer->Texture
+      = SDL_CreateTexture (Renderer, SDL_PIXELFORMAT_ARGB8888,
+                           SDL_TEXTUREACCESS_STREAMING, Width, Height);
+  Buffer->Width = Width;
+  Buffer->Height = Height;
+  Buffer->BytesPerPixel = 4;
 
-  BitmapMemory
-      = mmap (0, Width * Height * BytesPerPixel, PROT_READ | PROT_WRITE,
-              MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  Buffer->Memory
+      = mmap (0, Width * Height * Buffer->BytesPerPixel,
+              PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 }
 
 internal void
-SDLUpdateWindow (SDL_Window *Window, SDL_Renderer *Renderer)
+SDLUpdateWindow (SDL_Window *Window, SDL_Renderer *Renderer,
+                 sdl_offscreen_buffer Buffer)
 {
-  SDL_UpdateTexture (Texture, 0, BitmapMemory, BitmapWidth * BytesPerPixel);
-  SDL_RenderTexture (Renderer, Texture, 0, 0);
+  SDL_UpdateTexture (Buffer.Texture, 0, Buffer.Memory,
+                     Buffer.Width * Buffer.BytesPerPixel);
+  SDL_RenderTexture (Renderer, Buffer.Texture, 0, 0);
   SDL_RenderPresent (Renderer);
 }
 
@@ -102,7 +115,8 @@ HandleEvent (SDL_Event *Event)
                 Event->window.data2);
         SDL_Window *Window = SDL_GetWindowFromID (Event->window.windowID);
         SDL_Renderer *Renderer = SDL_GetRenderer (Window);
-        SDLResizeTexture (Renderer, Event->window.data1, Event->window.data2);
+        SDLResizeTexture (&GlobalBackbuffer, Renderer, Event->window.data1,
+                          Event->window.data2);
       }
       break;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -152,8 +166,8 @@ main (int argc, char *argv[])
                       Running = false;
                     }
                 }
-              RenderWeirdGradient (XOffset, YOffset);
-              SDLUpdateWindow (Window, Renderer);
+              RenderWeirdGradient (GlobalBackbuffer, XOffset, YOffset);
+              SDLUpdateWindow (Window, Renderer, GlobalBackbuffer);
 
               ++XOffset;
               YOffset += 2;
