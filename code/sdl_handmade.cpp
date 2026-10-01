@@ -1,5 +1,7 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_video.h>
 #include <stdio.h>
 #include <sys/mman.h>
 
@@ -29,23 +31,35 @@ typedef uint64_t uint64;
 // global_variable int BytesPerPixel = 4;
 
 struct sdl_offscreen_buffer
+// pixels are always 32 bit and have the BGRX format(little endianess)
 {
   SDL_Texture *Texture;
   void *Memory;
   int Width;
   int Height;
-  int BytesPerPixel;
+  int Pitch;
 };
 global_variable sdl_offscreen_buffer GlobalBackbuffer;
+
+struct sdl_window_dimension
+{
+  int Width;
+  int Height;
+};
+
+sdl_window_dimension
+SDLGetWindowDimension (SDL_Window *Window)
+{
+  sdl_window_dimension Result;
+  SDL_GetWindowSize (Window, &Result.Width, &Result.Height);
+
+  return (Result);
+}
 
 internal void
 RenderWeirdGradient (sdl_offscreen_buffer Buffer, int BlueOffset,
                      int GreenOffset)
 {
-  int Width = Buffer.Width;
-  int Height = Buffer.Height;
-
-  int Pitch = Width * Buffer.BytesPerPixel;
   uint8 *Row = (uint8 *)Buffer.Memory;
   for (int Y = 0; Y < Buffer.Height; ++Y)
     {
@@ -57,7 +71,7 @@ RenderWeirdGradient (sdl_offscreen_buffer Buffer, int BlueOffset,
 
           *Pixel++ = ((0xFF << 24) | (Green << 8) | Blue << 0);
         }
-      Row += Pitch;
+      Row += Buffer.Pitch;
     }
 };
 
@@ -66,10 +80,10 @@ SDLResizeTexture (sdl_offscreen_buffer *Buffer, SDL_Renderer *Renderer,
                   int Width, int Height)
 {
 
+  const int BytesPerPixel = 4;
   if (Buffer->Memory)
     {
-      munmap (Buffer->Memory,
-              Buffer->Width * Buffer->Height * Buffer->BytesPerPixel);
+      munmap (Buffer->Memory, Buffer->Width * Buffer->Height * BytesPerPixel);
     }
   if (Buffer->Texture)
     {
@@ -80,20 +94,19 @@ SDLResizeTexture (sdl_offscreen_buffer *Buffer, SDL_Renderer *Renderer,
                            SDL_TEXTUREACCESS_STREAMING, Width, Height);
   Buffer->Width = Width;
   Buffer->Height = Height;
-  Buffer->BytesPerPixel = 4;
+  Buffer->Pitch = Width * BytesPerPixel;
 
   Buffer->Memory
-      = mmap (0, Width * Height * Buffer->BytesPerPixel,
-              PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+      = mmap (0, Width * Height * BytesPerPixel, PROT_READ | PROT_WRITE,
+              MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 }
 
 internal void
 SDLUpdateWindow (SDL_Window *Window, SDL_Renderer *Renderer,
                  sdl_offscreen_buffer Buffer)
 {
-  SDL_UpdateTexture (Buffer.Texture, 0, Buffer.Memory,
-                     Buffer.Width * Buffer.BytesPerPixel);
-  SDL_RenderTexture (Renderer, Buffer.Texture, 0, 0);
+  SDL_UpdateTexture (Buffer.Texture, 0, Buffer.Memory, Buffer.Pitch);
+  SDL_RenderTexture (Renderer, Buffer.Texture, NULL, NULL);
   SDL_RenderPresent (Renderer);
 }
 
@@ -109,14 +122,14 @@ HandleEvent (SDL_Event *Event)
         return (ShouldQuit) = true;
       }
       break;
-    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+    case SDL_EVENT_WINDOW_RESIZED:
       {
         printf ("SDL_WINDOWEVENT_SIZE_CHANGED (%d, %d\n", Event->window.data1,
                 Event->window.data2);
         SDL_Window *Window = SDL_GetWindowFromID (Event->window.windowID);
         SDL_Renderer *Renderer = SDL_GetRenderer (Window);
-        SDLResizeTexture (&GlobalBackbuffer, Renderer, Event->window.data1,
-                          Event->window.data2);
+        // SDLResizeTexture (&GlobalBackbuffer, Renderer, Event->window.data1,
+        //                   Event->window.data2);
       }
       break;
     case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -151,9 +164,16 @@ main (int argc, char *argv[])
 
       if (Renderer)
         {
+          // in SDL3, we have to initialize SDL_RenderTexture() to manually
+          // allocate the 640x480
+          // in SDL2, this would have been inplicitly done by our event handler
+          // for size changes: SDL_WINDOWEVENT_SIZE_CHANGED
+          //
+          SDLResizeTexture (&GlobalBackbuffer, Renderer, 640, 480);
+
           bool Running = true;
           int Width, Height;
-          SDL_GetWindowSize (Window, &Width, &Height);
+          SDLGetWindowDimension (Window);
           int XOffset = 0;
           int YOffset = 0;
           while (Running)
