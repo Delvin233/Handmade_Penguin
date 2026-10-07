@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_gamepad.h>
+#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_video.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -13,6 +14,7 @@
 #define internal static
 #define local_persist static
 #define global_variable static
+#define MAX_CONTROLLERS 4
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -151,11 +153,31 @@ HandleEvent (SDL_Event *Event)
 int
 main (int argc, char *argv[])
 {
-  // Initializing our subsystem
-  SDL_Init (SDL_INIT_VIDEO);
+  // Initializing our subsystems
+  SDL_Init (SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
   // Create the window
   SDL_Window *Window
       = SDL_CreateWindow ("Handmade Penguin", 640, 480, SDL_WINDOW_RESIZABLE);
+
+  // NOTE: Id pause here and work  sdl2 for now... seems the port is slapping
+  // me :( SDL_Gamepad *ControllerHandles[MAX_CONTROLLERS]; int ControllerIndex
+  // = 0;
+  // // int MaxJoysticks = SDL_GetGamepads (&ControllerIndex);
+  // SDL_JoystickID *GamepadIDs = SDL_GetGamepads (&ControllerIndex);
+
+  // for (int JoystickIndex = 0; JoystickIndex < MaxJoysticks; ++JoystickIndex)
+  //   {
+  //     if (!SDL_IsGamepad (JoystickIndex))
+  //       {
+  //         continue;
+  //       }
+  //     if (ControllerIndex >= MAX_CONTROLLERS)
+  //       {
+  //         break;
+  //       }
+  //     ControllerHandles[ControllerIndex] = SDL_OpenGamepad (JoystickIndex);
+  //     ControllerIndex++;
+  //   }
 
   if (Window)
     {
