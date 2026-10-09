@@ -1,7 +1,9 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_audio.h>
 #include <SDL2/SDL_gamecontroller.h>
 #include <SDL2/SDL_haptic.h>
 #include <SDL2/SDL_joystick.h>
+#include <cstring>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -166,6 +168,8 @@ HandleEvent (SDL_Event *Event)
         SDL_Keycode KeyCode = Event->key.keysym.sym;
         bool IsDown = (Event->key.state == SDL_PRESSED);
         bool WasDown = false;
+        bool AltKeyWasDown = (Event->key.keysym.mod & KMOD_ALT);
+
         if (Event->key.state == SDL_RELEASED)
           {
             WasDown = true;
@@ -175,7 +179,7 @@ HandleEvent (SDL_Event *Event)
             WasDown = true;
           }
 
-        // keybinds for keyboard
+        // keybinds for kbd
         if (KeyCode == SDLK_w)
           {
             // printf ("W \n");
@@ -233,6 +237,10 @@ HandleEvent (SDL_Event *Event)
         else if (KeyCode == SDLK_SPACE)
           {
           }
+        else if (KeyCode == SDLK_F4 && AltKeyWasDown)
+          {
+            ShouldQuit = true;
+          }
       }
       break;
     }
@@ -286,12 +294,20 @@ SDLCloseGameControllers ()
     }
 }
 
+internal void
+SDLAudioCallback (void *UserData, Uint8 *AudioData, int Length)
+{
+  // clear our audio buffer to silence
+  memset (AudioData, 0, Length);
+}
+
 int
 main (int argc, char *argv[])
 {
   // as to why i added this comment?
-  // Initialze out subsystem(s)
-  SDL_Init (SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
+  // Initialze our subsystem(s)
+  SDL_Init (SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC
+            | SDL_INIT_AUDIO);
 
   // Create our window.
   SDL_Window *Window = SDL_CreateWindow (
@@ -327,6 +343,29 @@ main (int argc, char *argv[])
 
               ++XOffset;
               // YOffset += 2;
+
+              // Audio initialization
+              // test values
+              const int SamplesPerSecond = 44100;
+              const int BufferSize = 1024;
+
+              SDL_AudioSpec AudioSettings = { 0 };
+
+              AudioSettings.freq = SamplesPerSecond;
+              AudioSettings.format = AUDIO_S16SYS;
+              AudioSettings.channels = 2;
+              AudioSettings.samples = BufferSize;
+              AudioSettings.callback = &SDLAudioCallback;
+
+              SDL_OpenAudio (&AudioSettings, 0);
+
+              // checking for the right format
+              if (AudioSettings.format != AUDIO_S16SYS)
+                {
+                  // TODO: Complain if we dont get a S16LE buffer
+                }
+
+              SDL_PauseAudio (0);
 
               // Button mapping
               for (int ControllerIndex = 0; ControllerIndex < MAX_CONTROLLERS;
@@ -434,6 +473,7 @@ main (int argc, char *argv[])
     }
 
   SDLCloseGameControllers ();
+  SDL_CloseAudio ();
   SDL_Quit ();
   return (0);
 }
