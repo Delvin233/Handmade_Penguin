@@ -1,9 +1,5 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
-#include <SDL2/SDL_gamecontroller.h>
-#include <SDL2/SDL_haptic.h>
-#include <SDL2/SDL_joystick.h>
-#include <cstring>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
@@ -294,17 +290,44 @@ SDLCloseGameControllers ()
     }
 }
 
+// internal void
+// SDLAudioCallback (void *UserData, Uint8 *AudioData, int Length)
+// {
+//   // clear our audio buffer to silence
+//   memset (AudioData, 0, Length);
+// }
+
 internal void
-SDLAudioCallback (void *UserData, Uint8 *AudioData, int Length)
+SDLInitAudio (int32 SamplesPerSecond, int32 BufferSize)
 {
-  // clear our audio buffer to silence
-  memset (AudioData, 0, Length);
+
+  // Audio initialization
+  SDL_AudioSpec AudioSettings = { 0 };
+
+  AudioSettings.freq = SamplesPerSecond;
+  AudioSettings.format = AUDIO_S16SYS;
+  AudioSettings.channels = 2;
+  AudioSettings.samples = BufferSize;
+
+  // NOTE: Use the callback if SDL_QueeuAudio() isnt to be used
+  // AudioSettings.callback = &SDLAudioCallback;
+  // We use NULL if we'd use SDL_QueueAudio()
+  // AudioSettings.callback = NULL;
+
+  SDL_OpenAudio (&AudioSettings, 0);
+
+  // checking for the right format
+  if (AudioSettings.format != AUDIO_S16SYS)
+    {
+      // TODO: Complain if we dont get a S16LE buffer
+      printf (" We didnt get AUDIO_S16LE/S16SYS as our sample format \n");
+      SDL_CloseAudio ();
+    }
 }
 
 int
 main (int argc, char *argv[])
 {
-  // as to why i added this comment?
   // Initialze our subsystem(s)
   SDL_Init (SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC
             | SDL_INIT_AUDIO);
@@ -314,6 +337,7 @@ main (int argc, char *argv[])
       "Handmade Penguuuu", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
       640, 480, SDL_WINDOW_RESIZABLE);
 
+  // Initialize our controllers
   SDLOpenGameControllers ();
 
   if (Window)
@@ -328,6 +352,21 @@ main (int argc, char *argv[])
                             Dimension.Height);
           int XOffset = 0;
           int YOffset = 0;
+
+          // chapter8
+          // NOTE: testing the sound
+          int SamplesPerSecond = 48000;
+          int ToneHz = 256;
+          int16 ToneVolume = 3000;
+          uint32 RunningSampleIndex = 0;
+          int SquareWavePeriod = SamplesPerSecond / ToneHz;
+          int HalfSquareWavePeriod = SquareWavePeriod / 2;
+          int BytesPerSample = sizeof (int16) * 2;
+          int BytesToWrite = 800 * BytesPerSample;
+
+          SDLInitAudio (48000, SamplesPerSecond * BytesPerSample / 60);
+          bool SoundIsPlaying = false;
+
           while (Running)
             {
               SDL_Event Event;
@@ -338,36 +377,8 @@ main (int argc, char *argv[])
                       Running = false;
                     }
                 }
-              RenderWeirdGradient (GlobalBackbuffer, XOffset, YOffset);
-              SDLUpdateWindow (Window, Renderer, GlobalBackbuffer);
 
-              ++XOffset;
-              // YOffset += 2;
-
-              // Audio initialization
-              // test values
-              const int SamplesPerSecond = 44100;
-              const int BufferSize = 1024;
-
-              SDL_AudioSpec AudioSettings = { 0 };
-
-              AudioSettings.freq = SamplesPerSecond;
-              AudioSettings.format = AUDIO_S16SYS;
-              AudioSettings.channels = 2;
-              AudioSettings.samples = BufferSize;
-              AudioSettings.callback = &SDLAudioCallback;
-
-              SDL_OpenAudio (&AudioSettings, 0);
-
-              // checking for the right format
-              if (AudioSettings.format != AUDIO_S16SYS)
-                {
-                  // TODO: Complain if we dont get a S16LE buffer
-                }
-
-              SDL_PauseAudio (0);
-
-              // Button mapping
+              // Button mapping and polling for input
               for (int ControllerIndex = 0; ControllerIndex < MAX_CONTROLLERS;
                    ++ControllerIndex)
                 {
@@ -460,6 +471,42 @@ main (int argc, char *argv[])
                       // TODO: When not pluggen in
                     }
                 }
+
+              RenderWeirdGradient (GlobalBackbuffer, XOffset, YOffset);
+
+              // Sound output test
+              int TargetQueueBytes = SamplesPerSecond * BytesPerSample;
+              int BytesToWrite = TargetQueueBytes - SDL_GetQueuedAudioSize (1);
+              if (BytesToWrite)
+                {
+                  void *SoundBuffer = malloc (BytesToWrite);
+                  int16 *SampleOut = (int16 *)SoundBuffer;
+                  int SampleCount = BytesToWrite / BytesPerSample;
+
+                  for (int SampleIndex = 0; SampleIndex < SampleCount;
+                       ++SampleIndex)
+                    {
+                      int16 SampleValue
+                          = ((RunningSampleIndex++ / HalfSquareWavePeriod) % 2)
+                                ? ToneVolume
+                                : -ToneVolume;
+                      *SampleOut++ = SampleValue;
+                      *SampleOut++ = SampleValue;
+                    }
+                  SDL_QueueAudio (1, SoundBuffer, BytesToWrite);
+                  free (SoundBuffer);
+                }
+
+              if (!SoundIsPlaying)
+                {
+                  SDL_PauseAudio (0);
+                  SoundIsPlaying = true;
+                }
+
+              SDLUpdateWindow (Window, Renderer, GlobalBackbuffer);
+
+              ++XOffset;
+              // YOffset += 2;
             }
         }
       else
@@ -473,7 +520,6 @@ main (int argc, char *argv[])
     }
 
   SDLCloseGameControllers ();
-  SDL_CloseAudio ();
   SDL_Quit ();
   return (0);
 }
